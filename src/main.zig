@@ -10,8 +10,9 @@ pub fn main() !void {
         .{
             .port = 3000,
             .on_request = null,
-            .log = true,
+            .log = false,
             .public_folder = "python/static",
+            .max_clients = 100000,
         },
     );
 
@@ -21,9 +22,9 @@ pub fn main() !void {
     try listener.addEndpoint(Endpoints.getUserEndpoint());
 
     // fake some users
-    var uid: usize = undefined;
-    uid = try Endpoints.getUsers().addByName("renerocksai", null);
-    uid = try Endpoints.getUsers().addByName("renerocksai", "your mom");
+    // var uid: usize = undefined;
+    // uid = try Endpoints.getUsers().addByName("renerocksai", null);
+    // uid = try Endpoints.getUsers().addByName("renerocksai", "your mom");
 
     // listen
     try listener.listen();
@@ -32,7 +33,7 @@ pub fn main() !void {
 
     // and run
     zap.start(.{
-        .threads = 10,
+        .threads = 2000,
         .workers = 1,
     });
 }

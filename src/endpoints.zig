@@ -90,9 +90,10 @@ fn postUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
             if (users.addByName(u.first_name, u.last_name)) |id| {
                 if (zap.stringify(.{ .status = "OK", .id = id }, .{})) |json| {
                     _ = r.sendJson(json);
-                    std.debug.print("sleeping", .{});
-                    std.time.sleep(10 * 1000 * 1000 * 1000);
-                    std.debug.print("wakeup", .{});
+                    // std.debug.print("sleeping", .{});
+                    // std.time.sleep(10 * 1000 * 1000 * 1000);
+                    // std.debug.print("wakeup", .{});
+                    std.debug.print("/users id={d} count={d} !!!\n", .{ id, users.count });
                 }
             } else |_| {
                 return;
