@@ -9,13 +9,11 @@ pub const Self = @This();
 
 var alloc: std.mem.Allocator = undefined;
 var endpoint: zap.SimpleEndpoint = undefined;
-var list_endpoint: zap.SimpleEndpoint = undefined;
 var users: Users = undefined;
 
 pub fn init(
     a: std.mem.Allocator,
     user_path: []const u8,
-    userlist_path: []const u8,
 ) void {
     users = Users.init(a);
     alloc = a;
@@ -26,13 +24,6 @@ pub fn init(
         .put = putUser,
         .delete = deleteUser,
     });
-    list_endpoint = zap.SimpleEndpoint.init(.{
-        .path = userlist_path,
-        .get = listUsers,
-        .post = null,
-        .put = null,
-        .delete = null,
-    });
 }
 
 pub fn getUsers() *Users {
@@ -41,10 +32,6 @@ pub fn getUsers() *Users {
 
 pub fn getUserEndpoint() *zap.SimpleEndpoint {
     return &endpoint;
-}
-
-pub fn getUserListEndpoint() *zap.SimpleEndpoint {
-    return &list_endpoint;
 }
 
 fn userIdFromPath(path: []const u8) ?usize {
@@ -59,8 +46,11 @@ fn userIdFromPath(path: []const u8) ?usize {
 }
 
 fn getUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
-    _ = e;
     if (r.path) |path| {
+        // /users
+        if (path.len == e.settings.path.len) {
+            return listUsers(e, r);
+        }
         if (userIdFromPath(path)) |id| {
             if (users.get(id)) |user| {
                 if (zap.stringify(user, .{})) |json| {
@@ -100,6 +90,9 @@ fn postUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
             if (users.addByName(u.first_name, u.last_name)) |id| {
                 if (zap.stringify(.{ .status = "OK", .id = id }, .{})) |json| {
                     _ = r.sendJson(json);
+                    std.debug.print("sleeping", .{});
+                    std.time.sleep(10 * 1000 * 1000 * 1000);
+                    std.debug.print("wakeup", .{});
                 }
             } else |_| {
                 return;

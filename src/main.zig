@@ -11,15 +11,14 @@ pub fn main() !void {
             .port = 3000,
             .on_request = null,
             .log = true,
-            .public_folder = "./examples/endpoints/html",
+            .public_folder = "python/static",
         },
     );
 
-    Endpoints.init(allocator, "/user", "/list");
+    Endpoints.init(allocator, "/users");
 
     // add endpoints
     try listener.addEndpoint(Endpoints.getUserEndpoint());
-    try listener.addEndpoint(Endpoints.getUserListEndpoint());
 
     // fake some users
     var uid: usize = undefined;
@@ -33,7 +32,7 @@ pub fn main() !void {
 
     // and run
     zap.start(.{
-        .threads = 2,
-        .workers = 2,
+        .threads = 10,
+        .workers = 1,
     });
 }

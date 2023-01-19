@@ -1,12 +1,10 @@
-import os
-
 from flask import (
     Flask,
     jsonify,
-    abort,
+    # abort,
     make_response,
-    render_template_string,
-    Request,
+    # render_template_string,
+    # Request,
     request,
 )
 from flask_restful import Api, Resource, reqparse, fields, marshal, inputs
@@ -14,6 +12,8 @@ from flask_restful import Api, Resource, reqparse, fields, marshal, inputs
 app = Flask(__name__)
 api = Api(app)
 
+# in python, this is thread-safe.
+# the development server doesn't spawn processes either.
 users = {
         1: {'first_name': 'renerocksai', 'last_name': ''},
         2: {'first_name': 'renerocksai', 'last_name': 'your mom'},
