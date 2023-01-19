@@ -64,14 +64,16 @@ fn getUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
 fn listUsers(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
     _ = e;
     var l: std.ArrayList(User) = std.ArrayList(User).init(alloc);
-    if (users.list(&l)) {} else |_| {
+    if (users.list(&l)) {} else |err| {
+        std.debug.print("LIST ERROR: {}\n", .{err});
         return;
     }
     if (zap.stringifyArrayList(User, &l, .{})) |maybe_json| {
         if (maybe_json) |json| {
             _ = r.sendJson(json);
         }
-    } else |_| {
+    } else |err| {
+        std.debug.print("LIST JSONIFY ERR: {}\n", .{err});
         return;
     }
 }
@@ -93,9 +95,10 @@ fn postUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
                     // std.debug.print("sleeping", .{});
                     // std.time.sleep(10 * 1000 * 1000 * 1000);
                     // std.debug.print("wakeup", .{});
-                    std.debug.print("/users id={d} count={d} !!!\n", .{ id, users.count });
+                    // std.debug.print("/users id={d} count={d} !!!\n", .{ id, users.count });
                 }
-            } else |_| {
+            } else |err| {
+                std.debug.print("POST ERROR: {}\n", .{err});
                 return;
             }
         }

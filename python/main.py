@@ -69,8 +69,8 @@ class UserListApi(Resource):
         return make_response(jsonify(userlist))
 
 
-api.add_resource(UserApi, "/user/<int:userid>", endpoint="User")
-api.add_resource(UserApi, "/user", endpoint="Userx")
+api.add_resource(UserApi, "/users/<int:userid>", endpoint="User")
+api.add_resource(UserApi, "/users", endpoint="Userx")
 api.add_resource(UserListApi, "/list", endpoint="Users")
 
 

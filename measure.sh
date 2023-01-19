@@ -1,7 +1,7 @@
 #! /usr/bin/env bash
-THREADS=10
+THREADS=1
 # our work laptop runs into socket/fd issues with more than ~1000 connections
-CONNECTIONS=1000
+CONNECTIONS=1
 DURATION_SECONDS=10
 SCRIPT=./post-script.lua
 
@@ -32,6 +32,7 @@ if [ "$SUBJECT" = "python" ] ; then
     python main.py > /dev/null 2>&1 &
     PID=$!
     URL=http://127.0.0.1:3000/users
+    SCRIPT=../$SCRIPT
 fi
 
 sleep 1
