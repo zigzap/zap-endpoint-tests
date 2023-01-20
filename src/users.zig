@@ -1,4 +1,5 @@
 const std = @import("std");
+const zap = @import("zap");
 
 alloc: std.mem.Allocator = undefined,
 users: std.AutoHashMap(usize, InternalUser) = undefined,
@@ -32,16 +33,15 @@ pub fn init(a: std.mem.Allocator) Self {
 // the request will be freed (and its mem reused by facilio) when it's
 // completed, so we take copies of the names
 pub fn addByName(self: *Self, first: ?[]const u8, last: ?[]const u8) !usize {
-    // TODO: get rid of the temp allocation here
-    var temp = try self.alloc.alloc(InternalUser, 1);
-    defer self.alloc.free(temp);
-    var user = temp[0];
+    var user: InternalUser = undefined;
     user.firstnamelen = 0;
     user.lastnamelen = 0;
+
     if (first) |firstname| {
         std.mem.copy(u8, user.firstnamebuf[0..], firstname);
         user.firstnamelen = firstname.len;
     }
+
     if (last) |lastname| {
         std.mem.copy(u8, user.lastnamebuf[0..], lastname);
         user.lastnamelen = lastname.len;
@@ -52,8 +52,14 @@ pub fn addByName(self: *Self, first: ?[]const u8, last: ?[]const u8) !usize {
     defer self.lock.unlock();
     self.count = self.count + 1;
     user.id = self.count;
-    try self.users.put(user.id, user);
-    return user.id;
+    if (self.users.put(user.id, user)) {
+        return user.id;
+    } else |err| {
+        self.count -= 1;
+        std.debug.print("addByName error: {}\n", .{err});
+        // make sure we pass on the error
+        return err;
+    }
 }
 
 pub fn delete(self: *Self, id: usize) bool {
@@ -66,7 +72,7 @@ pub fn delete(self: *Self, id: usize) bool {
 pub fn get(self: *Self, id: usize) ?User {
     // we don't care about locking here, as our usage-pattern is unlikely to
     // get a user by id that is not known yet
-    if (self.users.get(id)) |pUser| {
+    if (self.users.getPtr(id)) |pUser| {
         return .{
             .id = pUser.id,
             .first_name = pUser.firstnamebuf[0..pUser.firstnamelen],
@@ -83,11 +89,10 @@ pub fn update(
     last: ?[]const u8,
 ) bool {
     // we don't care about locking here
-    var user: ?InternalUser = self.users.get(id);
-    // we got a copy apparently, so we need to put again
-    if (user) |*pUser| {
-        pUser.*.firstnamelen = 0;
-        pUser.*.lastnamelen = 0;
+    // we update in-place, via getPtr
+    if (self.users.getPtr(id)) |pUser| {
+        pUser.firstnamelen = 0;
+        pUser.lastnamelen = 0;
         if (first) |firstname| {
             std.mem.copy(u8, pUser.firstnamebuf[0..], firstname);
             pUser.firstnamelen = firstname.len;
@@ -96,28 +101,65 @@ pub fn update(
             std.mem.copy(u8, pUser.lastnamebuf[0..], lastname);
             pUser.lastnamelen = lastname.len;
         }
-        _ = self.users.remove(id);
-        if (self.users.put(id, pUser.*)) {
-            return true;
-        } else |_| {
-            return false;
-        }
     }
     return false;
 }
 
-// populate the list
-pub fn list(self: *Self, out: *std.ArrayList(User)) !void {
-    // We lock only on insertion, deletion, and listing
+pub fn toJSON(self: *Self) ![]const u8 {
     self.lock.lock();
     defer self.lock.unlock();
-    var it = JsonUserIterator.init(&self.users);
+
+    // We create a User list that's JSON-friendly
+    // NOTE: we could also implement the whole JSON writing ourselves here,
+    // working directly with InternalUser elements of the users hashmap.
+    // might actually save some memory
+    // TODO: maybe do it directly with the user.items
+    var l: std.ArrayList(User) = std.ArrayList(User).init(self.alloc);
+    defer l.deinit();
+
+    var it = JsonUserIteratorWithRaceCondition.init(&self.users);
+    while (it.next()) |user| {
+        try l.append(user);
+    }
+    std.debug.assert(self.users.count() == l.items.len);
+    std.debug.assert(self.count == l.items.len);
+    return zap.stringifyArrayListAlloc(self.alloc, User, &l, .{});
+}
+
+//
+// Note: the following code is kept in here because it taught us a lesson
+//
+pub fn listWithRaceCondition(self: *Self, out: *std.ArrayList(User)) !void {
+    // We lock only on insertion, deletion, and listing
+    //
+    // NOTE: race condition:
+    // =====================
+    //
+    // the list returned from here contains elements whose slice fields
+    // (.first_name and .last_name) point to char buffers of elements of the
+    // users list:
+    //
+    // user.first_name -> internal_user.firstnamebuf[..]
+    //
+    // -> we're only referencing the memory of first and last names.
+    // -> while the caller works with this list, e.g. "slowly" converting it to
+    //    JSON, the users hashmap might be added to massively in the background,
+    //    causing it to GROW -> realloc -> all slices get invalidated!
+    //
+    // So, to mitigate that, either:
+    // - listing and converting to JSON must become one locked operation
+    // - or: the iterator must make copies of the strings
+    self.lock.lock();
+    defer self.lock.unlock();
+    var it = JsonUserIteratorWithRaceCondition.init(&self.users);
     while (it.next()) |user| {
         try out.append(user);
     }
+    std.debug.assert(self.users.count() == out.items.len);
+    std.debug.assert(self.count == out.items.len);
 }
 
-const JsonUserIterator = struct {
+const JsonUserIteratorWithRaceCondition = struct {
     it: std.AutoHashMap(usize, InternalUser).ValueIterator = undefined,
     const This = @This();
 
@@ -132,11 +174,23 @@ const JsonUserIterator = struct {
 
     pub fn next(this: *This) ?User {
         if (this.it.next()) |pUser| {
-            return User{
-                .id = pUser.id,
-                .first_name = pUser.firstnamebuf[0..pUser.firstnamelen],
-                .last_name = pUser.lastnamebuf[0..pUser.lastnamelen],
+            // we get a pointer to the internal user. so it should be safe to
+            // create slices from its first and last name buffers
+            //
+            // SEE ABOVE NOTE regarding race condition why this is can be problematic
+            var user: User = .{
+                // we don't need .* syntax but want to make it obvious
+                .id = pUser.*.id,
+                .first_name = pUser.*.firstnamebuf[0..pUser.*.firstnamelen],
+                .last_name = pUser.*.lastnamebuf[0..pUser.*.lastnamelen],
             };
+            if (pUser.*.firstnamelen == 0) {
+                user.first_name = "";
+            }
+            if (pUser.*.lastnamelen == 0) {
+                user.last_name = "";
+            }
+            return user;
         }
         return null;
     }

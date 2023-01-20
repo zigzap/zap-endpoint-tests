@@ -1,25 +1,31 @@
 const std = @import("std");
 const zap = @import("zap");
-const Endpoints = @import("endpoints.zig");
+const Endpoint = @import("endpoint.zig");
+const builtin = @import("builtin");
 
 pub fn main() !void {
-    const allocator = std.heap.page_allocator;
+    var gpa = std.heap.GeneralPurposeAllocator(.{
+        .thread_safe = true,
+    }){};
+    var allocator = gpa.allocator();
+
     // setup listener
     var listener = zap.SimpleEndpointListener.init(
         allocator,
         .{
             .port = 3000,
             .on_request = null,
-            .log = false,
+            .log = true,
             .public_folder = "python/static",
             .max_clients = 100000,
+            .max_body_size = 100 * 1024 * 1024,
         },
     );
 
-    Endpoints.init(allocator, "/users");
+    Endpoint.init(allocator, "/users");
 
     // add endpoints
-    try listener.addEndpoint(Endpoints.getUserEndpoint());
+    try listener.addEndpoint(Endpoint.getUserEndpoint());
 
     // fake some users
     // var uid: usize = undefined;
