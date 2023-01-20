@@ -66,7 +66,12 @@ pub fn delete(self: *Self, id: usize) bool {
     // We lock only on insertion, deletion, and listing
     self.lock.lock();
     defer self.lock.unlock();
-    return self.users.remove(id);
+
+    const ret = self.users.remove(id);
+    if (ret) {
+        self.count -= 1;
+    }
+    return ret; // We lock only on insertion, deletion, and listing
 }
 
 pub fn get(self: *Self, id: usize) ?User {
