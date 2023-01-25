@@ -4,9 +4,13 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/release-22.11";
     flake-utils.url = "github:numtide/flake-utils";
+
+    # required for latest zig
     zig.url = "github:mitchellh/zig-overlay";
 
-    # todo: add neovim nightly
+    # required for latest neovim
+    neovim-flake.url = "github:neovim/neovim?dir=contrib";
+    neovim-flake.inputs.nixpkgs.follows = "nixpkgs";
 
     # Used for shell.nix
     flake-compat = {
@@ -25,6 +29,7 @@
       # Other overlays
       (final: prev: {
         zigpkgs = inputs.zig.packages.${prev.system};
+        neovim-nightly = inputs.neovim-flake.packages.${prev.system}.neovim;
       })
     ];
 
@@ -33,10 +38,11 @@
   in
     flake-utils.lib.eachSystem systems (
       system: let
-        pkgs = import nixpkgs {inherit overlays system;};
+        pkgs = import nixpkgs {inherit overlays system; };
       in rec {
         devShells.default = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [
+            neovim-nightly
             zigpkgs.master
             bat
             wrk
