@@ -5,11 +5,6 @@ pub fn build(b: *std.build.Builder) void {
 
     const optimize = b.standardOptimizeOption(.{});
 
-    const facil_dep = b.dependency("facil.io", .{
-        .target = target,
-        .optimize = optimize,
-    });
-
     const zap = b.dependency("zap", .{
         .target = target,
         .optimize = optimize,
@@ -23,7 +18,7 @@ pub fn build(b: *std.build.Builder) void {
     });
 
     exe.addModule("zap", zap.module("zap"));
-    exe.linkLibrary(facil_dep.artifact("facil.io"));
+    exe.linkLibrary(zap.artifact("facil.io"));
     exe.install();
 
     const run_cmd = exe.run();
